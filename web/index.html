@@ -17,7 +17,7 @@
         <h2>正面</h2>
         <div class="drop-area" id="frontDrop">
           <span class="hint">点击或拖拽上传</span>
-          <input id="frontFile" type="file" accept="image/*" capture="environment" hidden />
+          <input id="frontFile" type="file" accept="image/*" hidden />
         </div>
         <div class="canvas-wrap">
           <canvas id="frontCanvas" width="600" height="400"></canvas>
@@ -37,7 +37,7 @@
         <h2>反面</h2>
         <div class="drop-area" id="backDrop">
           <span class="hint">点击或拖拽上传</span>
-          <input id="backFile" type="file" accept="image/*" capture="environment" hidden />
+          <input id="backFile" type="file" accept="image/*" hidden />
         </div>
         <div class="canvas-wrap">
           <canvas id="backCanvas" width="600" height="400"></canvas>
@@ -57,7 +57,7 @@
     <div class="preview-pane">
       <h2>A4 预览</h2>
       <div class="a4-wrap">
-        <canvas id="a4Canvas" width="248" height="350"></canvas>
+        <canvas id="a4Canvas" width="420" height="700"></canvas>
       </div>
       <div class="actions">
         <button id="exportPdf" disabled>导出 PDF</button>
