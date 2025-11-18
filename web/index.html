@@ -1,0 +1,69 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>身份证到A4 PDF</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>身份证到A4 PDF</h1>
+      <p>上传照片 → 调整裁剪 → 导出 PDF</p>
+    </header>
+    <div class="editor">
+      <div class="card-pane">
+        <h2>正面</h2>
+        <div class="drop-area" id="frontDrop">
+          <span class="hint">点击或拖拽上传</span>
+          <input id="frontFile" type="file" accept="image/*" capture="environment" hidden />
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="frontCanvas" width="600" height="400"></canvas>
+          <div class="zoom-bar">
+            <button id="frontZoomOut">－</button>
+            <span id="frontZoomText">100%</span>
+            <button id="frontZoomIn">＋</button>
+          </div>
+        </div>
+        <div class="controls">
+          <label>旋转(°)<input id="frontRotate" type="range" min="-45" max="45" value="0" /></label>
+          <button id="frontApply">应用</button>
+        </div>
+        <img id="frontResult" />
+      </div>
+      <div class="card-pane">
+        <h2>反面</h2>
+        <div class="drop-area" id="backDrop">
+          <span class="hint">点击或拖拽上传</span>
+          <input id="backFile" type="file" accept="image/*" capture="environment" hidden />
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="backCanvas" width="600" height="400"></canvas>
+          <div class="zoom-bar">
+            <button id="backZoomOut">－</button>
+            <span id="backZoomText">100%</span>
+            <button id="backZoomIn">＋</button>
+          </div>
+        </div>
+        <div class="controls">
+          <label>旋转(°)<input id="backRotate" type="range" min="-45" max="45" value="0" /></label>
+          <button id="backApply">应用</button>
+        </div>
+        <img id="backResult" />
+      </div>
+    </div>
+    <div class="preview-pane">
+      <h2>A4 预览</h2>
+      <div class="a4-wrap">
+        <canvas id="a4Canvas" width="248" height="350"></canvas>
+      </div>
+      <div class="actions">
+        <button id="exportPdf" disabled>导出 PDF</button>
+      </div>
+    </div>
+  </div>
+  <script src="/app.js"></script>
+</body>
+</html>
