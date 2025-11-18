@@ -29,3 +29,9 @@ header p{margin:4px 0 0;color:#555}
 .a4-wrap{display:inline-block;border:1px solid #aaa;border-radius:4px;background:#fff;position:relative}
 #a4Canvas{display:block;width:248px;height:350px;background:#fafafa}
 .preview-pane .actions button{padding:12px 22px;border:1px solid #444;background:#222;color:#fff;border-radius:10px;cursor:pointer;font-size:18px;width:100%;max-width:320px}
+footer.footer{margin-top:24px;padding:16px;color:#555;font-size:14px}
+footer.footer a{color:#0066cc;text-decoration:none}
+footer.footer a:hover{text-decoration:underline}
+footer.footer .changelog{margin-top:8px}
+footer.footer .changelog ul{margin:6px 0 0 18px;padding:0}
+footer.footer .changelog li{margin:4px 0}

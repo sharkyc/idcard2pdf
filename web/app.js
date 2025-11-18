@@ -219,6 +219,7 @@ function setupPane(prefix){
       zoom = Math.min(1, Math.min(canvas.width/img.width, canvas.height/img.height));
       offset = {x:0,y:0};
       updateZoomText(); draw();
+      URL.revokeObjectURL(url);
     };
     img.src = url;
     const fd = new FormData();

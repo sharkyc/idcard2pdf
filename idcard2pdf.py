@@ -106,7 +106,7 @@ def extract_idcard(path: str, pad_px: int = 20, refine: bool = True, rotate_to_l
         else:
             warped = cv2.copyMakeBorder(warped, pad_px, pad_px, pad_px, pad_px, cv2.BORDER_CONSTANT, value=(255, 255, 255))
     if rotate_to_landscape and warped.shape[1] < warped.shape[0]:
-        warped = cv2.rotate(warped, cv2.ROTATE_90_CLOCKWISE)
+        warped = cv2.rotate(warped, cv2.ROTATE_90_COUNTERCLOCKWISE)
     if warped.shape[2] == 4:
         rgba = cv2.cvtColor(warped, cv2.COLOR_BGRA2RGBA)
         return Image.fromarray(rgba)

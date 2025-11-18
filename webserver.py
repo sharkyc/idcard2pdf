@@ -73,6 +73,8 @@ def api_warp():
             warped = cv2.copyMakeBorder(warped, pad_px, pad_px, pad_px, pad_px, cv2.BORDER_CONSTANT, value=(255, 255, 255, 0))
         else:
             warped = cv2.copyMakeBorder(warped, pad_px, pad_px, pad_px, pad_px, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+    if warped.shape[1] < warped.shape[0]:
+        warped = cv2.rotate(warped, cv2.ROTATE_90_COUNTERCLOCKWISE)
     if warped.shape[2] == 4:
         img_out = Image.fromarray(cv2.cvtColor(warped, cv2.COLOR_BGRA2RGBA))
     else:
