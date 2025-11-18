@@ -1,0 +1,30 @@
+body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f6f7fb;color:#222}
+.container{max-width:1200px;margin:0 auto;padding:16px}
+header{text-align:center;margin-bottom:24px}
+header h1{margin:0;font-size:28px}
+header p{margin:4px 0 0;color:#555}
+.editor{display:flex;gap:16px;flex-wrap:wrap}
+.card-pane{flex:1 1 360px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.card-pane h2{margin:0 0 12px;font-size:18px}
+.drop-area{min-height:80px;border:2px dashed #bbb;border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:pointer;margin-bottom:12px;transition:.2s}
+.drop-area:hover{border-color:#444;background:#fafafa}
+.drop-area.dragover{border-color:#00a2ff;background:#f0f8ff}
+.drop-area .hint{color:#777}
+.canvas-wrap{position:relative;border:1px solid #ccc;border-radius:4px;overflow:hidden;margin-bottom:12px}
+#frontCanvas,#backCanvas{display:block;width:100%;height:400px;background:#fafafa;cursor:grab;user-select:none;touch-action:none}
+#frontCanvas.can-grab:hover,#backCanvas.can-grab:hover{cursor:grab}
+#frontCanvas.grab-corner:hover,#backCanvas.grab-corner:hover{cursor:pointer}
+#frontCanvas:active,#backCanvas:active{cursor:grabbing}
+.zoom-bar{position:absolute;bottom:8px;right:8px;display:flex;gap:4px;align-items:center;background:#fff;border:1px solid #ccc;border-radius:4px;padding:4px 8px;font-size:14px}
+.zoom-bar button{width:24px;height:24px;border:1px solid #999;background:#fff;border-radius:4px;cursor:pointer;font-size:16px;line-height:1;text-align:center}
+.zoom-bar button:hover{background:#eee}
+.controls{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.controls label{display:flex;gap:6px;align-items:center;font-size:14px}
+.controls input[type=range]{width:120px}
+.controls button{padding:10px 18px;border:1px solid #444;background:#222;color:#fff;border-radius:10px;cursor:pointer;font-size:16px}
+.controls button:hover{background:#444}
+.card-pane img{max-width:100%;display:block;border:1px solid #ddd;border-radius:4px;margin-top:12px}
+.preview-pane{background:#fff;border:1px solid #ddd;border-radius:8px;padding:16px;box-shadow:0 2px 6px rgba(0,0,0,.06);text-align:center}
+.preview-pane h2{margin:0 0 12px;font-size:18px}
+.a4-wrap{display:inline-block;border:1px solid #aaa;border-radius:4px;background:#fff;position:relative}
+#a4Canvas{display:block;width:248px;height:350px;background:#fafafa}
