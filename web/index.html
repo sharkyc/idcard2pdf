@@ -73,6 +73,53 @@
       <div class="a4-wrap">
         <canvas id="a4Canvas" width="420" height="700"></canvas>
       </div>
+
+      <!-- 水印控制面板 -->
+      <div class="watermark-panel">
+        <div class="watermark-header">
+          <label>
+            <input type="checkbox" id="watermarkEnabled" />
+            启用水印
+          </label>
+          <button id="watermarkPreset" class="btn-small">常用用途</button>
+        </div>
+
+        <div class="watermark-controls" id="watermarkControls">
+          <div class="watermark-row">
+            <label>水印文字</label>
+            <input type="text" id="watermarkText" value="仅用于XX办理" placeholder="输入水印文字" />
+          </div>
+
+          <div class="watermark-row">
+            <label>水印模式</label>
+            <select id="watermarkMode">
+              <option value="single">单个水印（居中）</option>
+              <option value="tile" selected>满屏水印</option>
+            </select>
+          </div>
+
+          <div class="watermark-row">
+            <label>字体大小 <span id="watermarkSizeValue">48</span>pt</label>
+            <input type="range" id="watermarkSize" min="12" max="120" value="48" />
+          </div>
+
+          <div class="watermark-row">
+            <label>透明度 <span id="watermarkOpacityValue">30</span>%</label>
+            <input type="range" id="watermarkOpacity" min="5" max="100" value="30" />
+          </div>
+
+          <div class="watermark-row">
+            <label>颜色</label>
+            <input type="color" id="watermarkColor" value="#ff0000" />
+          </div>
+
+          <div class="watermark-row">
+            <label>旋转角度 <span id="watermarkRotationValue">-45</span>°</label>
+            <input type="range" id="watermarkRotation" min="-90" max="90" value="-45" />
+          </div>
+        </div>
+      </div>
+
       <div class="actions">
         <button id="exportPdf" disabled>导出 PDF</button>
       </div>
@@ -82,6 +129,7 @@
     <div class="changelog">
       <strong>版本记录</strong>
       <ul>
+        <li>v0.4 新增水印功能：支持自定义文字、大小、颜色、透明度、旋转角度；单水印和满屏两种模式；实时预览效果</li>
         <li>v0.3 优化裁切体验：实时预览、自动水平、边缘扩展、触摸优化</li>
         <li>v0.2 增加底部提示与GitHub链接；应用后自动横向长边</li>
         <li>v0.1 初始版本</li>

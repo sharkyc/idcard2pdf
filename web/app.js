@@ -484,8 +484,64 @@ function drawA4Preview(){
     const x = (pageW - cardW)/2;
     ctx.drawImage(backImg, x, startY, cardW, cardH);
     ctx.drawImage(frontImg, x, startY + cardH + gap, cardW, cardH);
+
+    // Draw watermark if enabled
+    const watermarkEnabled = document.getElementById('watermarkEnabled').checked;
+    if (watermarkEnabled) {
+      drawWatermarkOnCanvas(ctx, pageW, pageH, scale);
+    }
   }
   frontImg.onload = onload; backImg.onload = onload;
+}
+
+function drawWatermarkOnCanvas(ctx, pageW, pageH, scale) {
+  const text = document.getElementById('watermarkText').value || '仅用于XX办理';
+  const mode = document.getElementById('watermarkMode').value;
+  const size = parseInt(document.getElementById('watermarkSize').value) * scale / 2; // Scale down for preview
+  const opacity = parseInt(document.getElementById('watermarkOpacity').value) / 100;
+  const color = document.getElementById('watermarkColor').value;
+  const rotation = parseInt(document.getElementById('watermarkRotation').value);
+
+  ctx.save();
+  ctx.globalAlpha = opacity;
+  ctx.fillStyle = color;
+  ctx.font = `bold ${size}px sans-serif`;
+
+  const rotationRad = rotation * Math.PI / 180;
+
+  if (mode === 'single') {
+    // Single centered watermark
+    ctx.translate(pageW / 2, pageH / 2);
+    ctx.rotate(rotationRad);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, 0, 0);
+  } else {
+    // Tiled watermark mode
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+
+    // Measure text for spacing
+    const metrics = ctx.measureText(text);
+    const textWidth = metrics.width;
+    const textHeight = size * 1.2;
+
+    const spacingX = textWidth + 30 * scale / 2;
+    const spacingY = textHeight + 30 * scale / 2;
+
+    // Create a grid of watermarks
+    for (let y = -pageH; y < pageH * 2; y += spacingY) {
+      for (let x = -pageW; x < pageW * 2; x += spacingX) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(rotationRad);
+        ctx.fillText(text, 0, 0);
+        ctx.restore();
+      }
+    }
+  }
+
+  ctx.restore();
 }
 
 function maybeEnableExport(){
@@ -498,9 +554,111 @@ function maybeEnableExport(){
 document.getElementById('exportPdf').addEventListener('click', async ()=>{
   const front = document.getElementById('frontResult').src;
   const back = document.getElementById('backResult').src;
-  const res = await fetch('/api/export', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ front_base64: front, back_base64: back }) });
+
+  // Collect watermark settings
+  const watermarkEnabled = document.getElementById('watermarkEnabled').checked;
+  let watermarkConfig = null;
+
+  if (watermarkEnabled) {
+    watermarkConfig = {
+      text: document.getElementById('watermarkText').value || '仅用于XX办理',
+      mode: document.getElementById('watermarkMode').value,
+      size: parseInt(document.getElementById('watermarkSize').value),
+      opacity: parseInt(document.getElementById('watermarkOpacity').value) / 100,
+      color: document.getElementById('watermarkColor').value,
+      rotation: parseInt(document.getElementById('watermarkRotation').value)
+    };
+  }
+
+  const payload = {
+    front_base64: front,
+    back_base64: back
+  };
+
+  if (watermarkConfig) {
+    payload.watermark = watermarkConfig;
+  }
+
+  const res = await fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
   const blob = await res.blob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = 'idcard_a4.pdf'; a.click();
+});
+
+// Watermark UI controls
+const watermarkEnabled = document.getElementById('watermarkEnabled');
+const watermarkControls = document.getElementById('watermarkControls');
+const watermarkSize = document.getElementById('watermarkSize');
+const watermarkSizeValue = document.getElementById('watermarkSizeValue');
+const watermarkOpacity = document.getElementById('watermarkOpacity');
+const watermarkOpacityValue = document.getElementById('watermarkOpacityValue');
+const watermarkRotation = document.getElementById('watermarkRotation');
+const watermarkRotationValue = document.getElementById('watermarkRotationValue');
+const watermarkPreset = document.getElementById('watermarkPreset');
+
+// Toggle watermark controls
+watermarkEnabled.addEventListener('change', () => {
+  if (watermarkEnabled.checked) {
+    watermarkControls.classList.add('active');
+    watermarkControls.classList.remove('disabled');
+  } else {
+    watermarkControls.classList.remove('active');
+    watermarkControls.classList.add('disabled');
+  }
+  // Refresh preview when watermark is toggled
+  drawA4Preview();
+});
+
+// Update slider values and refresh preview
+watermarkSize.addEventListener('input', () => {
+  watermarkSizeValue.textContent = watermarkSize.value;
+  drawA4Preview();
+});
+
+watermarkOpacity.addEventListener('input', () => {
+  watermarkOpacityValue.textContent = watermarkOpacity.value;
+  drawA4Preview();
+});
+
+watermarkRotation.addEventListener('input', () => {
+  watermarkRotationValue.textContent = watermarkRotation.value;
+  drawA4Preview();
+});
+
+// Refresh preview when other watermark settings change
+document.getElementById('watermarkText').addEventListener('input', drawA4Preview);
+document.getElementById('watermarkMode').addEventListener('change', drawA4Preview);
+document.getElementById('watermarkColor').addEventListener('input', drawA4Preview);
+
+// Preset button - show common use cases
+watermarkPreset.addEventListener('click', () => {
+  const presets = [
+    { text: '仅用于办理银行卡', color: '#ff0000' },
+    { text: '仅用于办理社保', color: '#ff0000' },
+    { text: '仅用于办理公积金', color: '#ff0000' },
+    { text: '仅用于办理护照', color: '#ff0000' },
+    { text: '仅用于办理签证', color: '#ff0000' },
+    { text: '仅用于入职办理', color: '#ff0000' },
+    { text: '仅用于XX办理', color: '#0066cc' },
+    { text: '仅供一次性使用', color: '#0066cc' }
+  ];
+
+  const preset = presets[Math.floor(Math.random() * presets.length)];
+  document.getElementById('watermarkText').value = preset.text;
+  document.getElementById('watermarkColor').value = preset.color;
+
+  // Enable watermark if not already enabled
+  if (!watermarkEnabled.checked) {
+    watermarkEnabled.checked = true;
+    watermarkControls.classList.add('active');
+    watermarkControls.classList.remove('disabled');
+  }
+
+  // Refresh preview
+  drawA4Preview();
 });

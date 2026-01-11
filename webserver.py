@@ -162,6 +162,8 @@ def api_export():
     payload = request.json
     f_b64 = payload.get("front_base64")
     b_b64 = payload.get("back_base64")
+    watermark_config = payload.get("watermark")
+
     if not f_b64 or not b_b64:
         return jsonify({"error": "missing images"}), 400
     f_raw = base64.b64decode(f_b64.split(",")[-1])
@@ -171,7 +173,7 @@ def api_export():
     buf = io.BytesIO()
     tmp_path = buf
     cbuf = io.BytesIO()
-    make_a4_pdf(f_img, b_img, cbuf)
+    make_a4_pdf(f_img, b_img, cbuf, watermark_config=watermark_config)
     cbuf.seek(0)
     return send_file(cbuf, mimetype="application/pdf", as_attachment=True, download_name="idcard_a4.pdf")
 

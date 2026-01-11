@@ -9,6 +9,8 @@ from PIL import Image
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 
 
 def _read_bgr(path: str) -> np.ndarray:
@@ -120,12 +122,157 @@ def _pil_to_bytes(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-def make_a4_pdf(front: Image.Image, back: Image.Image, out_path: str) -> None:
+# Global variable to track if Chinese font has been registered
+_chinese_font_registered = False
+_chinese_font_name = None
+
+
+def _register_chinese_font():
+    """Register a Chinese font for ReportLab"""
+    global _chinese_font_registered, _chinese_font_name
+
+    if _chinese_font_registered:
+        return _chinese_font_name
+
+    # List of common Chinese fonts to try, in order of preference
+    font_paths = []
+
+    # Windows fonts
+    windows_fonts = [
+        ('C:/Windows/Fonts/msyh.ttc', 'Microsoft YaHei'),
+        ('C:/Windows/Fonts/simhei.ttf', 'SimHei'),
+        ('C:/Windows/Fonts/simsun.ttc', 'SimSun'),
+        ('C:/Windows/Fonts/simkai.ttf', 'KaiTi'),
+    ]
+
+    # Linux fonts
+    linux_fonts = [
+        ('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc', 'WenQuanYi Zen Hei'),
+        ('/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc', 'Noto Sans CJK'),
+        ('/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', 'Noto Sans CJK'),
+        ('/System/Library/Fonts/PingFang.ttc', 'PingFang'),  # macOS also
+    ]
+
+    # macOS fonts
+    macos_fonts = [
+        ('/System/Library/Fonts/PingFang.ttc', 'PingFang'),
+        ('/System/Library/Fonts/STHeiti Light.ttc', 'STHeiti'),
+        ('/Library/Fonts/Arial Unicode.ttf', 'Arial Unicode'),
+    ]
+
+    # Try to find and register a font based on the platform
+    import platform
+    system = platform.system()
+
+    if system == 'Windows':
+        font_paths = windows_fonts
+    elif system == 'Linux':
+        font_paths = linux_fonts + windows_fonts  # Also try Windows fonts via Wine
+    elif system == 'Darwin':  # macOS
+        font_paths = macos_fonts
+    else:
+        font_paths = linux_fonts + macos_fonts + windows_fonts  # Try all
+
+    for font_path, font_name in font_paths:
+        if os.path.exists(font_path):
+            try:
+                # Register the font with a unique name
+                registered_name = f'ChineseFont-{font_name.replace(" ", "")}'
+                pdfmetrics.registerFont(TTFont(registered_name, font_path))
+                _chinese_font_registered = True
+                _chinese_font_name = registered_name
+                print(f"Registered Chinese font: {font_name} from {font_path}")
+                return registered_name
+            except Exception as e:
+                print(f"Failed to register font {font_path}: {e}")
+                continue
+
+    # If no Chinese font found, return None (will use default)
+    print("Warning: No Chinese font found, watermarks may not display correctly")
+    _chinese_font_registered = True  # Don't try again
+    _chinese_font_name = None
+    return None
+
+
+def _contains_chinese(text: str) -> bool:
+    """Check if text contains Chinese characters"""
+    for char in text:
+        if '\u4e00' <= char <= '\u9fff':
+            return True
+    return False
+
+
+def make_a4_pdf(front: Image.Image, back: Image.Image, out_path: str, watermark_config: dict = None) -> None:
     page_w, page_h = A4
     c = canvas.Canvas(out_path, pagesize=A4)
 
     def mm_to_pt(mm: float) -> float:
         return mm * 72.0 / 25.4
+
+    def hex_to_rgb(hex_color: str) -> tuple:
+        """Convert hex color to RGB tuple (0-1 range for ReportLab)"""
+        hex_color = hex_color.lstrip('#')
+        return tuple(int(hex_color[i:i+2], 16) / 255.0 for i in (0, 2, 4))
+
+    def draw_watermark(c_canvas, config: dict, page_width: float, page_height: float):
+        """Draw watermark on the canvas"""
+        text = config.get('text', '仅用于XX办理')
+        mode = config.get('mode', 'tile')
+        size = config.get('size', 48)
+        opacity = config.get('opacity', 0.3)
+        color = config.get('color', '#ff0000')
+        rotation = config.get('rotation', -45)
+
+        c_canvas.saveState()
+        c_canvas.setFillAlpha(opacity)
+
+        # Convert hex color to RGB
+        rgb_color = hex_to_rgb(color)
+        c_canvas.setFillColorRGB(*rgb_color)
+
+        # Choose font based on whether text contains Chinese
+        if _contains_chinese(text):
+            font_name = _register_chinese_font()
+            if font_name:
+                c_canvas.setFont(font_name, size)
+            else:
+                # Fallback to default, but it won't display Chinese correctly
+                c_canvas.setFont("Helvetica-Bold", size)
+        else:
+            c_canvas.setFont("Helvetica-Bold", size)
+
+        # Get font name for stringWidth calculation
+        if _contains_chinese(text):
+            font_for_width = _register_chinese_font() or "Helvetica-Bold"
+        else:
+            font_for_width = "Helvetica-Bold"
+
+        if mode == 'single':
+            # Single centered watermark
+            c_canvas.translate(page_width / 2, page_height / 2)
+            c_canvas.rotate(rotation)
+            c_canvas.drawCentredString(0, 0, text)
+        else:
+            # Tiled watermark mode
+            # Calculate text dimensions for spacing
+            text_width = c_canvas.stringWidth(text, font_for_width, size)
+            text_height = size * 1.2  # Approximate height with line spacing
+
+            # Spacing between watermarks
+            spacing_x = text_width + 50
+            spacing_y = text_height + 50
+
+            # Create a grid of watermarks
+            for y in range(int(-page_height), int(page_height * 2), int(spacing_y)):
+                for x in range(int(-page_width), int(page_width * 2), int(spacing_x)):
+                    c_canvas.saveState()
+                    # Position and rotate
+                    c_canvas.translate(x, y)
+                    c_canvas.rotate(rotation)
+                    c_canvas.drawString(0, 0, text)
+                    c_canvas.restoreState()
+
+        c_canvas.restoreState()
 
     card_w_pt = mm_to_pt(85.6)
     card_h_pt = mm_to_pt(54.0)
@@ -145,8 +292,14 @@ def make_a4_pdf(front: Image.Image, back: Image.Image, out_path: str) -> None:
     back_y = start_y
     front_y = start_y + card_h_pt + gap_pt
 
+    # Draw ID cards
     c.drawImage(ImageReader(io.BytesIO(_pil_to_bytes(front))), front_x, front_y, width=card_w_pt, height=card_h_pt, preserveAspectRatio=False, mask='auto')
     c.drawImage(ImageReader(io.BytesIO(_pil_to_bytes(back))), back_x, back_y, width=card_w_pt, height=card_h_pt, preserveAspectRatio=False, mask='auto')
+
+    # Draw watermark if configured
+    if watermark_config:
+        draw_watermark(c, watermark_config, page_w, page_h)
+
     c.showPage()
     c.save()
 
