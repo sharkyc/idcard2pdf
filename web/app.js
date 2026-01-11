@@ -11,6 +11,9 @@ async function postJson(url, data){
 function setupPane(prefix){
   const fileInput = document.getElementById(prefix+'File');
   const dropArea = document.getElementById(prefix+'Drop');
+  const statusEl = document.getElementById(prefix+'Status'); // Status message element
+  const expandInput = document.getElementById(prefix+'Expand'); // Expansion ratio slider
+  const expandValue = document.getElementById(prefix+'ExpandValue'); // Expansion value display
   const canvas = document.getElementById(prefix+'Canvas');
   const ctx = canvas.getContext('2d');
   const zoomText = document.getElementById(prefix+'ZoomText');
@@ -20,6 +23,9 @@ function setupPane(prefix){
   const applyBtn = document.getElementById(prefix+'Apply');
   const resultImg = document.getElementById(prefix+'Result');
   let img = null;
+  let originalFile = null; // Store original file for reset
+  let originalQuad = null; // Store original detected quad for expansion
+  let expandRatio = 0.08; // Default 8% expansion
   let zoom = 1;
   let quad = null;
   let dragging = -1;
@@ -32,6 +38,76 @@ function setupPane(prefix){
   let pinchStartDist = 0;
   let pinchStartZoom = 1;
   let pinchCenter = {x:0,y:0};
+
+  // Auto-preview with debouncing
+  let previewTimer = null;
+  let isPreviewPending = false;
+
+  // Apply expansion to quad
+  function applyExpansion(baseQuad, ratio) {
+    if (!baseQuad || ratio === 0) return baseQuad ? baseQuad.map(p => [...p]) : null;
+
+    // Calculate center
+    const cx = (baseQuad[0][0] + baseQuad[1][0] + baseQuad[2][0] + baseQuad[3][0]) / 4;
+    const cy = (baseQuad[0][1] + baseQuad[1][1] + baseQuad[2][1] + baseQuad[3][1]) / 4;
+
+    // Expand each point away from center
+    return baseQuad.map(p => [
+      p[0] + (p[0] - cx) * ratio,
+      p[1] + (p[1] - cy) * ratio
+    ]);
+  }
+
+  // Reverse expansion (shrink back to original)
+  function reverseExpansion(expandedQuad, currentRatio) {
+    if (!expandedQuad || currentRatio === 0) return expandedQuad ? expandedQuad.map(p => [...p]) : null;
+
+    // Calculate center
+    const cx = (expandedQuad[0][0] + expandedQuad[1][0] + expandedQuad[2][0] + expandedQuad[3][0]) / 4;
+    const cy = (expandedQuad[0][1] + expandedQuad[1][1] + expandedQuad[2][1] + expandedQuad[3][1]) / 4;
+
+    // Shrink each point towards center
+    return expandedQuad.map(p => [
+      p[0] - (p[0] - cx) * currentRatio / (1 + currentRatio),
+      p[1] - (p[1] - cy) * currentRatio / (1 + currentRatio)
+    ]);
+  }
+
+  function schedulePreview() {
+    if (!img || !quad) return;
+    if (previewTimer) clearTimeout(previewTimer);
+    isPreviewPending = true;
+    resultImg.style.opacity = '0.5'; // Show loading state
+    previewTimer = setTimeout(() => {
+      applyWarp();
+      isPreviewPending = false;
+    }, 600); // 600ms debounce
+  }
+
+  async function applyWarp() {
+    if (!img || !quad) return;
+    const b64 = await new Promise((resolve) => {
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      const cctx = c.getContext('2d');
+      cctx.drawImage(img, 0, 0);
+      resolve(c.toDataURL('image/jpeg', 0.95));
+    });
+    const res = await postJson('/api/warp', {
+      image_base64: b64,
+      quad: quad,
+      rotate: parseFloat(rotateInput.value),
+      pad_px: 20,
+      refine: true
+    });
+    if (res.image_base64) {
+      resultImg.src = res.image_base64;
+      resultImg.style.opacity = '1';
+      maybeEnableExport();
+      drawA4Preview();
+    }
+  }
   function getCanvasXY(e){
     const rect = canvas.getBoundingClientRect();
     const scaleX = canvas.width / rect.width;
@@ -66,10 +142,10 @@ function setupPane(prefix){
         const cy = dy + p[1]*zoom;
         ctx.fillStyle = '#ff5757';
         ctx.beginPath();
-        ctx.arc(cx, cy, 8, 0, Math.PI*2);
+        ctx.arc(cx, cy, 12, 0, Math.PI*2); // Increased from 8 to 12 for better visibility
         ctx.fill();
         ctx.strokeStyle = '#fff';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 3;
         ctx.stroke();
       }
     }
@@ -79,7 +155,7 @@ function setupPane(prefix){
     const iw = img.width, ih = img.height;
     const dw = iw*zoom, dh = ih*zoom;
     const dx = (canvas.width - dw)/2 + offset.x, dy = (canvas.height - dh)/2 + offset.y;
-    let best = -1, bestD = 36;
+    let best = -1, bestD = 900; // Increased from 36 to 900 (30px radius for better mobile touch)
     for(let i=0;i<4;i++){
       const cx = dx + quad[i][0]*zoom;
       const cy = dy + quad[i][1]*zoom;
@@ -180,9 +256,16 @@ function setupPane(prefix){
       const iw = img.width, ih = img.height;
       const dw = iw*zoom, dh = ih*zoom;
       const dx = (canvas.width - dw)/2 + offset.x, dy = (canvas.height - dh)/2 + offset.y;
+
+      // Update the corner position
       quad[dragging][0] = (x - dx) / zoom;
       quad[dragging][1] = (y - dy) / zoom;
+
+      // Update originalQuad by shrinking the current quad (remove expansion)
+      originalQuad = reverseExpansion(quad, expandRatio);
+
       draw();
+      schedulePreview(); // Trigger auto-preview on corner adjustment
       return;
     }
     const best = hitTest(x,y);
@@ -213,6 +296,7 @@ function setupPane(prefix){
   });
 
   function openFile(f){
+    originalFile = f; // Store original file for reset
     const url = URL.createObjectURL(f);
     img = new Image();
     img.onload = ()=>{
@@ -224,7 +308,34 @@ function setupPane(prefix){
     img.src = url;
     const fd = new FormData();
     fd.append('file', f);
-    postForm('/api/detect', fd).then(det=>{ quad = det.quad; draw(); });
+    fd.append('expand_ratio', expandRatio.toString()); // Send expansion ratio to server
+    postForm('/api/detect', fd).then(det=>{
+      // Server returns expanded quad, so we need to save the base (unexpanded) version
+      quad = det.quad;
+      if (det.detected && expandRatio > 0) {
+        // Shrink to get the original detected quad without expansion
+        originalQuad = reverseExpansion(quad, expandRatio);
+      } else {
+        // Detection failed or no expansion, save as-is
+        originalQuad = JSON.parse(JSON.stringify(quad));
+      }
+      draw();
+
+      // Show detection status
+      if (det.detected === false) {
+        statusEl.textContent = det.message || '未能自动检测到身份证，请手动调整四个角点';
+        statusEl.className = 'status-msg warning';
+      } else {
+        statusEl.textContent = det.message || '自动检测成功';
+        statusEl.className = 'status-msg success';
+        // Auto-hide success message after 3 seconds
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+        }, 3000);
+      }
+
+      schedulePreview(); // Auto-preview after detection
+    });
   }
   fileInput.addEventListener('change', ()=>{ if(fileInput.files[0]) openFile(fileInput.files[0]); });
   dropArea.addEventListener('click', ()=> fileInput.click());
@@ -236,17 +347,108 @@ function setupPane(prefix){
     if(e.dataTransfer.files[0]) openFile(e.dataTransfer.files[0]);
   });
 
-  applyBtn.addEventListener('click', async ()=>{
-    if(!img || !quad) return;
-    const b64 = await new Promise((resolve)=>{
-      const c = document.createElement('canvas');
-      c.width = img.width; c.height = img.height;
-      const cctx = c.getContext('2d');
-      cctx.drawImage(img,0,0);
-      resolve(c.toDataURL('image/jpeg', 0.95));
+  // Manual apply button (also triggers auto-preview)
+  applyBtn.addEventListener('click', () => {
+    if (previewTimer) clearTimeout(previewTimer);
+    applyWarp();
+  });
+
+  // Auto-preview on rotation change
+  rotateInput.addEventListener('input', () => {
+    schedulePreview();
+  });
+
+  // Expansion ratio slider
+  expandInput.addEventListener('input', () => {
+    if (!originalQuad || !quad) return;
+
+    const val = parseInt(expandInput.value, 10);
+    expandValue.textContent = val + '%';
+    const newRatio = val / 100; // Convert percentage to ratio
+
+    // First shrink back to original, then expand with new ratio
+    const baseQuad = reverseExpansion(quad, expandRatio);
+    quad = applyExpansion(baseQuad, newRatio);
+    expandRatio = newRatio;
+
+    // Update originalQuad to the new base (without expansion)
+    originalQuad = baseQuad;
+
+    draw();
+    schedulePreview();
+  });
+
+  // Auto-level button
+  const autoLevelBtn = document.getElementById(prefix + 'AutoLevel');
+  autoLevelBtn.addEventListener('click', () => {
+    if (!quad || quad.length !== 4) return;
+
+    // Use the base quad (without expansion) for angle calculation
+    const baseQuad = originalQuad || quad;
+
+    // Calculate the angle of the top edge (tl to tr)
+    const tl = baseQuad[0];
+    const tr = baseQuad[1];
+    const bl = baseQuad[3];
+    const br = baseQuad[2];
+
+    // Calculate angle of top edge
+    const topDx = tr[0] - tl[0];
+    const topDy = tr[1] - tl[1];
+    const topAngle = Math.atan2(topDy, topDx) * 180 / Math.PI;
+
+    // Calculate angle of bottom edge
+    const botDx = br[0] - bl[0];
+    const botDy = br[1] - bl[1];
+    const botAngle = Math.atan2(botDy, botDx) * 180 / Math.PI;
+
+    // Average the two angles for better accuracy
+    const avgAngle = (topAngle + botAngle) / 2;
+
+    // Set the rotation slider to compensate
+    rotateInput.value = -avgAngle;
+    schedulePreview();
+  });
+
+  // Reset button - re-run auto-detection
+  const resetBtn = document.getElementById(prefix + 'Reset');
+  resetBtn.addEventListener('click', () => {
+    if (!originalFile || !img) return;
+
+    // Reset rotation
+    rotateInput.value = 0;
+
+    // Clear status message
+    statusEl.className = 'status-msg';
+    statusEl.textContent = '';
+
+    // Re-run detection with current expansion ratio
+    const fd = new FormData();
+    fd.append('file', originalFile);
+    fd.append('expand_ratio', expandRatio.toString());
+    postForm('/api/detect', fd).then(det => {
+      quad = det.quad;
+      if (det.detected && expandRatio > 0) {
+        originalQuad = reverseExpansion(quad, expandRatio);
+      } else {
+        originalQuad = JSON.parse(JSON.stringify(quad));
+      }
+      draw();
+
+      // Show detection status
+      if (det.detected === false) {
+        statusEl.textContent = det.message || '未能自动检测到身份证，请手动调整四个角点';
+        statusEl.className = 'status-msg warning';
+      } else {
+        statusEl.textContent = det.message || '自动检测成功';
+        statusEl.className = 'status-msg success';
+        setTimeout(() => {
+          statusEl.style.display = 'none';
+        }, 3000);
+      }
+
+      schedulePreview();
     });
-    const res = await postJson('/api/warp', { image_base64: b64, quad: quad, rotate: parseFloat(rotateInput.value), pad_px: 20, refine: true });
-    if(res.image_base64){ resultImg.src = res.image_base64; maybeEnableExport(); drawA4Preview(); }
   });
 }
 

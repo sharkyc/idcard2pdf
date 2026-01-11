@@ -19,6 +19,11 @@
           <span class="hint">点击或拖拽上传</span>
           <input id="frontFile" type="file" accept="image/*" hidden />
         </div>
+        <div id="frontStatus" class="status-msg"></div>
+        <div class="expand-control">
+          <label>边缘扩展: <span id="frontExpandValue">8%</span></label>
+          <input id="frontExpand" type="range" min="0" max="30" value="8" step="1" />
+        </div>
         <div class="canvas-wrap">
           <canvas id="frontCanvas" width="600" height="400"></canvas>
           <div class="zoom-bar">
@@ -29,6 +34,8 @@
         </div>
         <div class="controls">
           <label>旋转(°)<input id="frontRotate" type="range" min="-45" max="45" value="0" /></label>
+          <button id="frontAutoLevel" class="btn-secondary">自动水平</button>
+          <button id="frontReset" class="btn-secondary">重置</button>
           <button id="frontApply">应用</button>
         </div>
         <img id="frontResult" />
@@ -38,6 +45,11 @@
         <div class="drop-area" id="backDrop">
           <span class="hint">点击或拖拽上传</span>
           <input id="backFile" type="file" accept="image/*" hidden />
+        </div>
+        <div id="backStatus" class="status-msg"></div>
+        <div class="expand-control">
+          <label>边缘扩展: <span id="backExpandValue">8%</span></label>
+          <input id="backExpand" type="range" min="0" max="30" value="8" step="1" />
         </div>
         <div class="canvas-wrap">
           <canvas id="backCanvas" width="600" height="400"></canvas>
@@ -49,6 +61,8 @@
         </div>
         <div class="controls">
           <label>旋转(°)<input id="backRotate" type="range" min="-45" max="45" value="0" /></label>
+          <button id="backAutoLevel" class="btn-secondary">自动水平</button>
+          <button id="backReset" class="btn-secondary">重置</button>
           <button id="backApply">应用</button>
         </div>
         <img id="backResult" />
@@ -68,6 +82,7 @@
     <div class="changelog">
       <strong>版本记录</strong>
       <ul>
+        <li>v0.3 优化裁切体验：实时预览、自动水平、边缘扩展、触摸优化</li>
         <li>v0.2 增加底部提示与GitHub链接；应用后自动横向长边</li>
         <li>v0.1 初始版本</li>
       </ul>

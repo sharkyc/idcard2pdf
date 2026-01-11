@@ -25,14 +25,44 @@ def api_detect():
     img = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
     quad = _find_card_quadrilateral(img)
     h, w = img.shape[:2]
+
+    # Get expansion ratio from request (default 0.08 = 8%)
+    expand_ratio = float(request.form.get("expand_ratio", 0.08))
+
     if quad is None:
+        # Detection failed - return default box with flag
         cx, cy = w // 2, h // 2
         dw, dh = int(w * 0.4), int(h * 0.3)
         pts = np.array([[cx - dw, cy - dh], [cx + dw, cy - dh], [cx + dw, cy + dh], [cx - dw, cy + dh]], dtype=np.float32)
+        return jsonify({
+            "width": w,
+            "height": h,
+            "quad": pts.tolist(),
+            "detected": False,
+            "message": "未能自动检测到身份证，请手动调整四个角点"
+        })
     else:
-        pts = quad
-    pts = pts.tolist()
-    return jsonify({"width": w, "height": h, "quad": pts})
+        # Apply expansion to ensure card corners are visible
+        if expand_ratio > 0:
+            # Calculate center point
+            center = np.mean(quad, axis=0)
+
+            # Expand each point away from center
+            expanded_quad = quad + (quad - center) * expand_ratio
+
+            # Clamp to image boundaries
+            expanded_quad[:, 0] = np.clip(expanded_quad[:, 0], 0, w - 1)
+            expanded_quad[:, 1] = np.clip(expanded_quad[:, 1], 0, h - 1)
+
+            quad = expanded_quad
+
+        return jsonify({
+            "width": w,
+            "height": h,
+            "quad": quad.tolist(),
+            "detected": True,
+            "message": "自动检测成功"
+        })
 
 
 @app.post("/api/warp")
@@ -48,6 +78,8 @@ def api_warp():
     raw = base64.b64decode(b64.split(",")[-1])
     img = Image.open(io.BytesIO(raw)).convert("RGB")
     arr = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
+
+    # Order corner points: tl, tr, br, bl
     ordered = np.array(quad, dtype=np.float32)
     s = ordered.sum(axis=1)
     diff = np.diff(ordered, axis=1)
@@ -56,29 +88,69 @@ def api_warp():
     tr = ordered[np.argmin(diff)]
     bl = ordered[np.argmax(diff)]
     ordered = np.array([tl, tr, br, bl], dtype=np.float32)
+
+    # Calculate initial output dimensions from quad
     w = int(max(np.linalg.norm(ordered[0] - ordered[1]), np.linalg.norm(ordered[2] - ordered[3])))
     h = int(max(np.linalg.norm(ordered[0] - ordered[3]), np.linalg.norm(ordered[1] - ordered[2])))
+    w = max(w, 1)
+    h = max(h, 1)
+
+    # Perspective transform to corrected rectangle
     dst = np.array([[0, 0], [w - 1, 0], [w - 1, h - 1], [0, h - 1]], dtype=np.float32)
     M = cv2.getPerspectiveTransform(ordered, dst)
     warped = cv2.warpPerspective(arr, M, (w, h))
+
+    # Add alpha channel if refinement is enabled
     if refine:
         alpha = np.ones((warped.shape[0], warped.shape[1]), dtype=np.uint8) * 255
         b, g, r = cv2.split(warped)
         warped = cv2.merge((b, g, r, alpha))
+
+    # Apply user rotation
     if rotate:
-        Mrot = cv2.getRotationMatrix2D((warped.shape[1] / 2.0, warped.shape[0] / 2.0), rotate, 1.0)
-        warped = cv2.warpAffine(warped, Mrot, (warped.shape[1], warped.shape[0]), flags=cv2.INTER_LINEAR, borderValue=(255, 255, 255, 0) if warped.shape[2] == 4 else (255, 255, 255))
+        center = (warped.shape[1] / 2.0, warped.shape[0] / 2.0)
+        Mrot = cv2.getRotationMatrix2D(center, rotate, 1.0)
+        border_value = (255, 255, 255, 0) if warped.shape[2] == 4 else (255, 255, 255)
+        warped = cv2.warpAffine(warped, Mrot, (warped.shape[1], warped.shape[0]),
+                                flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=border_value)
+
+    # Add padding
     if pad_px > 0:
-        if warped.shape[2] == 4:
-            warped = cv2.copyMakeBorder(warped, pad_px, pad_px, pad_px, pad_px, cv2.BORDER_CONSTANT, value=(255, 255, 255, 0))
-        else:
-            warped = cv2.copyMakeBorder(warped, pad_px, pad_px, pad_px, pad_px, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+        border_value = (255, 255, 255, 0) if warped.shape[2] == 4 else (255, 255, 255)
+        warped = cv2.copyMakeBorder(warped, pad_px, pad_px, pad_px, pad_px,
+                                    cv2.BORDER_CONSTANT, value=border_value)
+
+    # Auto-rotate to landscape (counter-clockwise)
     if warped.shape[1] < warped.shape[0]:
         warped = cv2.rotate(warped, cv2.ROTATE_90_COUNTERCLOCKWISE)
+
+    # Force to standard ID card aspect ratio (85.6mm / 54.0mm ≈ 1.585)
+    # This ensures consistent output size regardless of user marking
+    ID_CARD_ASPECT_RATIO = 85.6 / 54.0  # ≈ 1.585
+    cur_h, cur_w = warped.shape[:2]
+    cur_aspect = cur_w / cur_h
+
+    # Adjust dimensions to match standard ratio
+    # Keep the longer dimension, adjust the shorter one
+    if cur_aspect > ID_CARD_ASPECT_RATIO:
+        # Too wide, reduce width or increase height
+        new_w = int(cur_h * ID_CARD_ASPECT_RATIO)
+        new_h = cur_h
+    else:
+        # Too tall, increase width or reduce height
+        new_w = cur_w
+        new_h = int(cur_w / ID_CARD_ASPECT_RATIO)
+
+    # Use high-quality interpolation for resizing
+    interpolation = cv2.INTER_AREA if new_w < cur_w or new_h < cur_h else cv2.INTER_CUBIC
+    warped = cv2.resize(warped, (new_w, new_h), interpolation=interpolation)
+
+    # Convert to PIL Image
     if warped.shape[2] == 4:
         img_out = Image.fromarray(cv2.cvtColor(warped, cv2.COLOR_BGRA2RGBA))
     else:
         img_out = Image.fromarray(cv2.cvtColor(warped, cv2.COLOR_BGR2RGB))
+
     buf = io.BytesIO()
     img_out.save(buf, format="PNG")
     b64out = base64.b64encode(buf.getvalue()).decode("ascii")
